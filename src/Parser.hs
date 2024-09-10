@@ -54,6 +54,11 @@ variableParser = do v <- identifier lis
                                 <|> return (Var v)   
 
 
+-----------------------------------
+--- Parser de expresiones enteras
+-----------------------------------
+
+
 binaryOp2:: Parser (Exp Int -> Exp Int -> Exp Int)
 binaryOp2 = do reservedOp lis "*"
                return (\a -> \b -> (Times a b))
@@ -84,12 +89,16 @@ intexpbase = do n <- natural lis
                                      return v
                                   
 
------------------------------------
---- Parser de expresiones enteras
------------------------------------
 intexp :: Parser (Exp Int)
 intexp = do e <- chainl1 intexp2 binaryOp1
             return e
+
+
+------------------------------------
+--- Parser de expresiones booleanas
+------------------------------------
+
+
 
 boolBinaryOp :: Parser (Exp Int -> Exp Int -> Exp Bool)
 boolBinaryOp = do reservedOp lis "=="
@@ -136,9 +145,6 @@ boolexpInt = do e1 <- intexp
                 e2 <- intexp
                 return (f e1 e2)
 
-------------------------------------
---- Parser de expresiones booleanas
-------------------------------------
 
 boolexp :: Parser (Exp Bool)
 boolexp = do e <- boolexpOr
@@ -148,22 +154,43 @@ boolexp = do e <- boolexpOr
 --- Parser de comandos
 -----------------------------------
 
+commBase :: Parser Comm
+commBase = do reserved lis "skip"
+              return Skip
+              <|> do v <- identifier lis
+                     reservedOp lis "="
+                     e <- intexp
+                     return (Let v e)
+                     <|> do reserved lis "if"
+                            b <- boolexp
+                            reserved lis "then"
+                            c <- braces lis comm
+                            reserved lis "else"
+                            c2 <- braces lis comm
+                            return (IfThenElse b c c2)
+                            <|> do reserved lis "repeat"
+                                   c <- braces lis comm
+                                   reserved lis "until"
+                                   b <- boolexp
+                                   return (RepeatUntil c b)
+
+commSeq :: Parser (Comm -> Comm -> Comm)
+commSeq = do reservedOp lis ";"
+             return (\c -> \c1 -> (Seq c c1))
+
+
 comm :: Parser Comm
-comm = undefined
+comm = do c <- chainl1 commBase commSeq
+          return c
 
 
 ------------------------------------
 -- Función de parseo
 ------------------------------------
-parseComm :: SourceName -> String -> Either ParseError (Exp Bool)
-parseComm = parse (totParser boolexp)
+parseComm :: SourceName -> String -> Either ParseError Comm
+parseComm = parse (totParser comm)
 
-parseprueba :: SourceName -> String -> Exp Bool
-parseprueba b a = case parse (totParser boolexp) b a of
-                Right x -> x
-                _ -> (BFalse)
+parseBool :: SourceName -> String -> Either ParseError (Exp Bool)
+parseBool = parse (totParser boolexp)
 
-parseprueba2 :: SourceName -> String -> Exp Int
-parseprueba2 b a = case parse (totParser intexp) b a of
-                Right x -> x
-                _ -> (Var "error")
+parseInt = parse (totParser intexp)
